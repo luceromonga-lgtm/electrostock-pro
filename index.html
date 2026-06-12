@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ElectroStock Pro - Gráficos & Escáner</title>
+    <!-- Librerías Externas CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    
+    <style>
+        :root {
+            --bg-primary: #0b0f19;
+            --bg-gradient: radial-gradient(circle at 50% 50%, #1e293b 0%, #0f172a 100%);
+            --glass-bg: rgba(30, 41, 59, 0.45);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --accent-blue: #3b82f6;
+            --accent-cyan: #06b6d4;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+        body { background: var(--bg-primary); background-image: var(--bg-gradient); color: var(--text-main); min-height: 100vh; padding-bottom: 60px; }
+
+        header {
+            background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--glass-border); padding: 1.2rem 2rem;
+            display: flex; justify-content: space-between; align-items: center;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2); position: sticky; top: 0; z-index: 100;
+        }
+        .logo { font-size: 1.6rem; font-weight: 800; background: linear-gradient(to right, #60a5fa, #22d3ee); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .backup-controls { display: flex; gap: 12px; }
+
+        main { max-width: 1600px; margin: 2rem auto; padding: 0 2rem; }
+
+        /* PANEL DE GRÁFICOS (Grid 2x2) */
+        .dashboard-charts {
+            display: grid;
+            grid-template-cols: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .chart-card {
+            background: var(--glass-bg); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border); border-radius: 16px; padding: 1.5rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2); min-height: 320px;
+            display: flex; flex-direction: column; justify-content: space-between;
+        }
+        .chart-card h3 { font-size: 1rem; color: var(--text-muted); margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 0.5px; }
+        .chart-container { position: relative; width: 100%; height: 240px; }
+
+        /* BARRA DE ACCIONES */
+        .actions-bar {
+            background: var(--glass-bg); backdrop-filter: blur(16px); border: 1px solid var(--glass-border);
+            padding: 1.2rem; border-radius: 16px; display: flex; flex-wrap: wrap;
+            justify-content: space-between; align-items: center; gap: 1.2rem; margin-bottom: 2rem;
+        }
+        .search-box { position: relative; flex: 1; min-width: 300px; display: flex; gap: 10px; }
+        .search-box input {
+            width: 100%; padding: 0.8rem 1.2rem 0.8rem 2.8rem; background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--glass-border); border-radius: 10px; color: var(--text-main); font-size: 0.95rem;
+        }
+        .search-box::before { content: "🔍"; position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); }
+
+        /* BOTONES */
+        button { padding: 0.7rem 1.4rem; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: transform 0.1s; display: inline-flex; align-items: center; gap: 8px; font-size: 0.9rem; }
+        button:active { transform: scale(0.97); }
+        .btn-primary { background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: #fff; }
+        .btn-secondary { background: rgba(71, 85, 105, 0.5); color: #f1f5f9; border: 1px solid var(--glass-border); }
+        .btn-print { background: linear-gradient(135deg, #06b6d4, #0891b2); color: #fff; }
+        .btn-scan { background: linear-gradient(135deg, #a855f7, #7c3aed); color: #fff; }
+        .btn-danger { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); }
+
+        /* TABLA */
+        .table-container { background: var(--glass-bg); backdrop-filter: blur(16px); border: 1px solid var(--glass-border); border-radius: 16px; overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem; }
+        th { background: rgba(15, 23, 42, 0.4); color: var(--text-muted); padding: 1.1rem; font-weight: 700; text-transform: uppercase; font-size: 0.75rem; border-bottom: 2px solid var(--glass-border); }
+        td { padding: 1.1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05); color: #cbd5e1; }
+        tr:hover td { background-color: rgba(255, 255, 255, 0.04); }
+        .code-cell { font-family: monospace; color: var(--accent-cyan); font-weight: 700; }
+        
+        .stock-badge { display: inline-block; padding: 0.3rem 0.6rem; border-radius: 6px; font-weight: 700; font-size: 0.8rem; }
+        .stock-normal { background: rgba(16, 185, 129, 0.15); color: var(--success); }
+        .stock-low { background: rgba(245, 158, 11, 0.15); color: var(--warning); }
+        .stock-empty { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
+
+        /* MODALES */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(4, 6, 10, 0.6); backdrop-filter: blur(8px); display: flex; justify-content: center; align-items: center; z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+        .modal-overlay.active { opacity: 1; pointer-events: auto; }
+        .modal-container { background: rgba(22, 30, 49, 0.95); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 20px; width: 100%; max-width: 650px; padding: 2rem; box-shadow: 0 24px 50px rgba(0,0,0,0.6); }
+        .modal-header { font-size: 1.4rem; font-weight: 700; margin-bottom: 1.2rem; padding-bottom: 0.6rem; border-bottom: 1px solid rgba(255,255,255,0.08); }
+        .form-grid { display: grid; grid-template-cols: 1fr 1fr; gap: 14px; margin-bottom: 1.8rem; }
+        .form-group { display: flex; flex-direction: column; gap: 6px; }
+        .form-group.full-width { grid-column: span 2; }
+        .form-group label { font-size: 0.8rem; color: var(--text-muted); font-weight: 600; }
+        .form-group input { padding: 0.7rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #fff; }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 12px; }
+
+        /* ESTILOS DEL ESCÁNER CÁMARA */
+        #reader { width: 100%; background: #000; border-radius: 12px; overflow: hidden; border: none !important; }
+
+        /* ANIMACIÓN FILAS */
+        .animated-row { animation: slideIn 0.4s ease forwards; }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(-10px); background: rgba(59, 130, 246, 0.15); } to { opacity: 1; transform: translateY(0); } }
+
+        /* IMPRESIÓN */
+        @media print {
+            header, .actions-bar, .backup-controls, .dashboard-charts, td:last-child, th:last-child { display: none !important; }
+            body { background: #fff !important; color: #000 !important; }
+            .table-container { background: #fff !important; border: 1px solid #000 !important; }
+            td, th { color: #000 !important; border-bottom: 1px solid #000 !important; }
+            .code-cell { color: #000 !important; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo">⚙️ ELECTROSTOCK PRO</div>
+        <div class="backup-controls">
+            <button onclick="exportarBackup()" class="btn-secondary">📤 Exportar</button>
+            <button onclick="document.getElementById('file-input').click()" class="btn-secondary">📥 Importar</button>
+            <input type="file" id="file-input" style="display: none;" accept=".json" onchange="importarBackup(event)">
+        </div>
+    </header>
+
+    <main>
+        <!-- SECCIÓN DE GRÁFICOS ESTADÍSTICOS -->
+        <div class="dashboard-charts">
+            <div class="chart-card">
+                <h3>🔥 Productos Más Vendidos</h3>
+                <div class="chart-container"><canvas id="chartMasVendidos"></canvas></div>
+            </div>
+            <div class="chart-card">
+                <h3>📦 Distribución de Stock</h3>
+                <div class="chart-container"><canvas id="chartStock"></canvas></div>
+            </div>
+            <div class="chart-card">
+                <h3>⚠️ Unidades Dañadas por Producto</h3>
+                <div class="chart-container"><canvas id="chartDanados"></canvas></div>
+            </div>
+            <div class="chart-card">
+                <h3>📈 Historial de Ventas Mensuales ($)</h3>
+                <div class="chart-container"><canvas id="chartMensual"></canvas></div>
+            </div>
+        </div>
+
+        <!-- BARRA DE ACCIONES -->
+        <div class="actions-bar">
+            <div class="search-box">
+                <input type="text" id="searchInput" oninput="filtrarYMostrar()" placeholder="Buscar por nombre, código o marca...">
+                <button onclick="abrirEscaner()" class="btn-scan">📷 Escanear Código</button>
+            </div>
+            <div class="right-actions">
+                <button onclick="window.print()" class="btn-print">🖨️ Imprimir Reporte</button>
+                <button onclick="abrirFormulario()" class="btn-primary">➕ Añadir Producto</button>
+            </div>
+        </div>
+
+        <!-- TABLA DE INVENTARIO -->
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Código</th>
+                        <th>Producto</th>
+                        <th>Marca</th>
+                        <th>Modelo</th>
+                        <th>P. Compra</th>
+                        <th>P. Venta</th>
+                        <th>Existencias</th>
+                        <th>Ventas</th>
+                        <th>Dañadas</th>
+                        <th>Fecha Ingreso</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="inventoryBody"></tbody>
+            </table>
+        </div>
+    </main>
+
+    <!-- FORMULARIO MODAL -->
+    <div id="modalFormulario" class="modal-overlay">
+        <div class="modal-container">
+            <div id="modalTitle" class="modal-header">Nuevo Producto</div>
+            <form id="productForm" onsubmit="guardarFormulario(event)">
+                <div class="form-grid">
+                    <div class="form-group"><label>Código del producto*</label><input type="text" id="f_codigo" required></div>
+                    <div class="form-group"><label>Nombre del producto*</label><input type="text" id="f_nombre" required></div>
+                    <div class="form-group"><label>Marca*</label><input type="text" id="f_marca" required></div>
+                    <div class="form-group"><label>Modelo*</label><input type="text" id="f_modelo" required></div>
+                    <div class="form-group full-width"><label>Características técnicas</label><input type="text" id="f_caracteristicas"></div>
+                    <div class="form-group"><label>Precio de compra ($)*</label><input type="number" id="f_pcompra" step="0.01" required min="0"></div>
+                    <div class="form-group"><label>Precio de venta ($)*</label><input type="number" id="f_pventa" step="0.01" required min="0"></div>
+                    <div class="form-group"><label>Existencias*</label><input type="number" id="f_existencias" required min="0"></div>
+                    <div class="form-group"><label>Unidades vendidas</label><input type="number" id="f_ventas" min="0"></div>
+                    <div class="form-group"><label>Unidades dañadas</label><input type="number" id="f_danadas" min="0"></div>
+                    <div class="form-group"><label>Fecha de ingreso</label><input type="date" id="f_fecha"></div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" onclick="cerrarFormulario()" class="btn-secondary">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL DEL ESCÁNER CÁMARA -->
+    <div id="modalEscaner" class="modal-overlay">
+        <div class="modal-container" style="max-width: 480px;">
+            <div class="modal-header">Escáner de Cámara Activo</div>
+            <div id="reader"></div>
+            <div class="modal-actions" style="margin-top:1.5rem;">
+                <button type="button" onclick="cerrarEscaner()" class="btn-secondary">Cerrar Cámara</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Set de Datos Base
+        const productosBase = [
+            { codigo: "PROD-001", nombre: "Laptop Gamer", marca: "Asus", modelo: "ROG Strix G15", caracteristicas: "Ryzen 7, 16 GB, RTX 3050", precioCompra: 850, precioVenta: 1199, existencias: 12, ventas: 45, danadas: 1, fechaIngreso: "2026-01-15" },
+            { codigo: "PROD-002", nombre: "Smartphone", marca: "Samsung", modelo: "Galaxy S24", caracteristicas: "256 GB, cámara 200 MP", precioCompra: 700, precioVenta: 999, existencias: 25, ventas: 80, danadas: 0, fechaIngreso: "2026-01-22" },
+            { codigo: "PROD-003", nombre: "Televisor inteligente", marca: "LG", modelo: "OLED55C3", caracteristicas: "55\" 4K UHD, OLED", precioCompra: 900, precioVenta: 1299, existencias: 8, ventas: 30, danadas: 2, fechaIngreso: "2026-02-10" },
+            { codigo: "PROD-004", nombre: "Auriculares Inalámbricos", marca: "Sony", modelo: "WH-1000XM5", caracteristicas: "Cancelación de ruido", precioCompra: 250, precioVenta: 399, existencias: 40, ventas: 120, danadas: 0, fechaIngreso: "2026-02-15" },
+            { codigo: "PROD-005", nombre: "Tableta", marca: "Apple", modelo: "iPad Air 2024", caracteristicas: "Chip M2, Wi-Fi", precioCompra: 500, precioVenta: 699, existencias: 15, ventas: 55, danadas: 1, fechaIngreso: "2026-03-05" },
+            { codigo: "PROD-006", nombre: "Reloj inteligente", marca: "Garmin", modelo: "Forerunner 265", caracteristicas: "GPS, AMOLED", precioCompra: 350, precioVenta: 499, existencias: 20, ventas: 40, danadas: 0, fechaIngreso: "2026-03-12" },
+            { codigo: "PROD-007", nombre: "Cámara sin espejo", marca: "Canon", modelo: "EOS R50", caracteristicas: "24.2 MP, 4K", precioCompra: 650, precioVenta: 899, existencias: 10, ventas: 25, danadas: 0, fechaIngreso: "2026-04-02" },
+            { codigo: "PROD-008", nombre: "Altavoz Bluetooth", marca: "JBL", modelo: "Charge 5", caracteristicas: "IP67, batería 20h", precioCompra: 120, precioVenta: 179, existencias: 50, ventas: 200, danadas: 3, fechaIngreso: "2026-04-18" },
+            { codigo: "PROD-009", nombre: "Disco Duro Externo", marca: "Western Digital", modelo: "Elements", caracteristicas: "2 TB, USB 3.0", precioCompra: 60, precioVenta: 95, existencias: 60, ventas: 150, danadas: 1, fechaIngreso: "2026-05-01" },
+            { codigo: "PROD-010", nombre: "Monitor 4K", marca: "Dell", modelo: "U2723QE", caracteristicas: "27\", IPS, USB-C", precioCompra: 550, precioVenta: 799, existencias: 14, ventas: 22, danadas: 0, fechaIngreso: "2026-05-20" }
+        ];
+
+        let productos = [];
+        let editIndex = null;
+        let ultimoCodigoModificado = null;
+        let html5QrcodeScanner = null;
+
+        // Variables globales de gráficos para poder destruirlos y redibujarlos correctamente
+        let chart1, chart2, chart3, chart4;
+
+        function inicializar() {
+            const datosLocal = localStorage.getItem('almacen_graficos_pro');
+            if (datosLocal) productos = JSON.parse(datosLocal);
+            else { productos = [...productosBase]; guardarEnLocalStorage(); }
+            mostrarTabla(productos);
+            inicializarYActualizarGraficos();
+        }
+
+        function guardarEnLocalStorage() { localStorage.setItem('almacen_graficos_pro', JSON.stringify(productos)); }
+
+        function mostrarTabla(lista) {
+            const tbody = document.getElementById('inventoryBody');
+            tbody.innerHTML = '';
+            lista.forEach((p) => {
+                const originalIndex = productos.findIndex(x => x.codigo === p.codigo);
+                let badgeClass = p.existencias === 0 ? 'stock-empty' : (p.existencias <= 5 ? 'stock-low' : 'stock-normal');
+                let badgeText = p.existencias === 0 ? 'Agotado' : p.existencias;
+
+                const fila = document.createElement('tr');
+                if (ultimoCodigoModificado === p.codigo) fila.classList.add('animated-row');
+
+                fila.innerHTML = `
+                    <td class="code-cell">${p.codigo}</td>
+                    <td style="color:#fff; font-weight:600;">${p.nombre}</td>
+                    <td>${p.marca}</td>
+                    <td>${p.modelo}</td>
+                    <td style="font-family:monospace; text-align:right;">$${Number(p.precioCompra).toFixed(2)}</td>
+                    <td style="font-family:monospace; text-align:right; color:var(--accent-cyan); font-weight:600;">$${Number(p.precioVenta).toFixed(2)}</td>
+                    <td style="text-align:center;"><span class="stock-badge ${badgeClass}">${badgeText}</span></td>
+                    <td style="font-family:monospace; text-align:center;">${p.ventas}</td>
+                    <td style="font-family:monospace; text-align:center; ${p.danadas > 0 ? 'color:var(--danger);font-weight:bold;' : ''}">${p.danadas}</td>
+                    <td style="font-size:0.8rem; text-align:center;">${p.fechaIngreso || '-'}</td>
+                    <td>
+                        <button onclick="prepararEdicion(${originalIndex})" class="btn-secondary" style="padding:0.4rem 0.8rem; color:#60a5fa;">Editar</button>
+                    </td>
+                `;
+                tbody.appendChild(fila);
+            });
+            ultimoCodigoModificado = null;
+        }
+
+        function filtrarYMostrar() {
+            const query = document.getElementById('searchInput').value.toLowerCase().trim();
+            const filtrados = productos.filter(p => p.codigo.toLowerCase().includes(query) || p.nombre.toLowerCase().includes(query) || p.marca.toLowerCase().includes(query));
+            mostrarTabla(filtrados);
+        }
+
+        /* LÓGICA DE GRÁFICOS (CHART.JS) */
+        function inicializarYActualizarGraficos() {
+            if (chart1) chart1.destroy();
+            if (chart2) chart2.destroy();
+            if (chart3) chart3.destroy();
+            if (chart4) chart4.destroy();
+
+            const opcionesComunes = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: '#94a3b8' } } },
+                scales: {
+                    x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } },
+                    y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } }
+                }
+            };
+
+            // 1. Productos más vendidos
+            const topVendidos = [...productos].sort((a,b) => b.ventas - a.ventas).slice(0, 5);
+            chart1 = new Chart(document.getElementById('chartMasVendidos'), {
+                type: 'bar',
+                data: {
+                    labels: topVendidos.map(p => p.nombre),
+                    datasets: [{ label: 'Unidades Vendidas', data: topVendidos.map(p => p.ventas), backgroundColor: '#3b82f6', borderRadius: 5 }]
+                },
+                options: opcionesComunes
+            });
+
+            // 2. Stock Disponible (Dona)
+            chart2 = new Chart(document.getElementById('chartStock'), {
+                type: 'doughnut',
+                data: {
+                    labels: productos.slice(0, 6).map(p => p.nombre),
+                    datasets: [{ data: productos.slice(0, 6).map(p => p.existencias), backgroundColor: ['#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#a855f7', '#6366f1'] }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: '#94a3b8', font: { size: 10 } } } } }
+            });
+
+            // 3. Productos Dañados
+            const productosDanados = productos.filter(p => p.danadas > 0);
+            chart3 = new Chart(document.getElementById('chartDanados'), {
+                type: 'bar',
+                data: {
+                    labels: productosDanados.map(p => p.nombre),
+                    datasets: [{ label: 'Mermas/Dañados', data: productosDanados.map(p => p.danadas), backgroundColor: '#ef4444', borderRadius: 5 }]
+                },
+                options: opcionesComunes
+            });
+
+            // 4. Ventas por Mes (Evolutivo financiero)
+            const mesesLabels = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun'];
+            const ventasPorMes = [0, 0, 0, 0, 0, 0];
+            productos.forEach(p => {
+                if(p.fechaIngreso) {
+                    const mes = parseInt(p.fechaIngreso.split('-')[1]);
+                    if(mes >= 1 && mes <= 6) {
+                        ventasPorMes[mes-1] += (p.ventas * p.precioVenta);
+                    }
+                }
+            });
+
+            chart4 = new Chart(document.getElementById('chartMensual'), {
+                type: 'line',
+                data: {
+                    labels: mesesLabels,
+                    datasets: [{ label: 'Ingresos ($)', data: ventasPorMes, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', tension: 0.3, fill: true }]
+                },
+                options: opcionesComunes
+            });
+        }
+
+        /* LÓGICA DEL ESCÁNER CÁMARA (HTML5-QRCODE) */
+        function abrirEscaner() {
+            document.getElementById('modalEscaner').classList.add('active');
+            html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 15, qrbox: { width: 250, height: 150 } }, false);
+            html5QrcodeScanner.render(onScanSuccess);
+        }
+
+        function cerrarEscaner() {
+            if (html5QrcodeScanner) {
+                html5QrcodeScanner.clear().then(() => {
+                    document.getElementById('modalEscaner').classList.remove('active');
+                }).catch(err => console.error("Error al cerrar cámara: ", err));
+            } else {
+                document.getElementById('modalEscaner').classList.remove('active');
+            }
+        }
+
+        function onScanSuccess(decodedText) {
+            cerrarEscaner();
+            const codigoLimpio = decodedText.trim().toUpperCase();
+            document.getElementById('searchInput').value = codigoLimpio;
+            
+            // Buscar si el producto ya existe en el almacén
+            const index = productos.findIndex(p => p.codigo === codigoLimpio);
+            if (index !== -1) {
+                filtrarYMostrar();
+                // Destacar fila temporalmente
+                ultimoCodigoModificado = codigoLimpio;
+                mostrarTabla(productos.filter(p => p.codigo === codigoLimpio));
+            } else {
+                // Si no existe, abre el formulario rellenando automáticamente el nuevo código detectado
+                abrirFormulario();
+                document.getElementById('f_codigo').value = codigoLimpio;
+            }
+        }
+
+        /* FORMULARIO CRUD */
+        function abrirFormulario() {
+            editIndex = null;
+            document.getElementById('modalTitle').innerText = 'Nuevo Producto';
+            document.getElementById('productForm').reset();
+            document.getElementById('f_codigo').disabled = false;
+            document.getElementById('f_fecha').value = new Date().toISOString().split('T')[0];
+            document.getElementById('modalFormulario').classList.add('active');
+        }
+
+        function cerrarFormulario() { document.getElementById('modalFormulario').classList.remove('active'); }
+
+        function prepararEdicion(index) {
+            editIndex = index;
+            const p = productos[index];
+            document.getElementById('modalTitle').innerText = `Editar: ${p.codigo}`;
+            document.getElementById('f_codigo').value = p.codigo;
+            document.getElementById('f_codigo').disabled = true;
+            document.getElementById('f_nombre').value = p.nombre;
+            document.getElementById('f_marca').value = p.marca;
+            document.getElementById('f_modelo').value = p.modelo;
+            document.getElementById('f_caracteristicas').value = p.caracteristicas || '';
+            document.getElementById('f_pcompra').value = p.precioCompra;
+            document.getElementById('f_pventa').value = p.precioVenta;
+            document.getElementById('f_existencias').value = p.existencias;
+            document.getElementById('f_ventas').value = p.ventas;
+            document.getElementById('f_danadas').value = p.danadas;
+            document.getElementById('f_fecha').value = p.fechaIngreso || '';
+            document.getElementById('modalFormulario').classList.add('active');
+        }
+
+        function guardarFormulario(e) {
+            e.preventDefault();
+            const codigo = document.getElementById('f_codigo').value.trim().toUpperCase();
+
+            const pData = {
+                codigo: codigo,
+                nombre: document.getElementById('f_nombre').value.trim(),
+                marca: document.getElementById('f_marca').value.trim(),
+                modelo: document.getElementById('f_modelo').value.trim(),
+                caracteristicas: document.getElementById('f_caracteristicas').value.trim(),
+                precioCompra: parseFloat(document.getElementById('f_pcompra').value) || 0,
+                precioVenta: parseFloat(document.getElementById('f_pventa').value) || 0,
+                existencias: parseInt(document.getElementById('f_existencias').value) || 0,
+                ventas: parseInt(document.getElementById('f_ventas').value) || 0,
+                danadas: parseInt(document.getElementById('f_danadas').value) || 0,
+                fechaIngreso: document.getElementById('f_fecha').value
+            };
+
+            ultimoCodigoModificado = codigo;
+
+            if (editIndex !== null) productos[editIndex] = pData;
+            else productos.push(pData);
+
+            guardarEnLocalStorage();
+            cerrarFormulario();
+            document.getElementById('searchInput').value = '';
+            mostrarTabla(productos);
+            inicializarYActualizarGraficos(); // Redibujar con datos frescos
+        }
+
+        // Funciones auxiliares para JSON
+        function exportarBackup() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(productos, null, 2));
+            const dl = document.createElement('a'); dl.setAttribute("href", dataStr); dl.setAttribute("download", "backup_stock.json"); dl.click();
+        }
+        function importarBackup(e) {
+            const file = e.target.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                productos = JSON.parse(evt.target.result); guardarEnLocalStorage(); inicializar();
+            };
+            reader.readAsText(file);
+        }
+
+        window.onload = inicializar;
+    </script>
+</body>
+</html>
